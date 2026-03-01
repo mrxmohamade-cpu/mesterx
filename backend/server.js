@@ -4,7 +4,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
-const connectDB = require('./config/db');
+const { connectDB, mongoose } = require('./config/db');
 
 const authRoutes = require('./routes/authRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
@@ -12,11 +12,6 @@ const productRoutes = require('./routes/productRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 
 const app = express();
-
-connectDB().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
 
 app.use(helmet());
 app.use(cors());
@@ -29,7 +24,18 @@ app.use(
   })
 );
 
-app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
+app.get('/', (_req, res) => {
+  res.json({
+    message: 'MesterX API is running',
+    healthEndpoint: '/api/health'
+  });
+});
+
+app.get('/api/health', (_req, res) => {
+  const dbConnected = mongoose.connection.readyState === 1;
+  res.json({ status: dbConnected ? 'ok' : 'degraded', dbConnected });
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/products', productRoutes);
@@ -41,4 +47,15 @@ app.use((err, _req, res, _next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+const startServer = async () => {
+  try {
+    await connectDB();
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
+};
+
+startServer();

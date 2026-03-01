@@ -1,12 +1,29 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const Product = require('../models/Product');
 const Order = require('../models/Order');
 const auth = require('../middleware/auth');
 
 const router = express.Router();
 
-router.post('/', async (req, res) => {
+const orderLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 20,
+  message: { message: 'طلبات كثيرة من نفس العنوان. حاول لاحقاً.' }
+});
+
+router.post('/', orderLimiter, async (req, res) => {
   const { productId, firstName, lastName, phone, state, notes = '', selectedSize, selectedColor } = req.body;
+
+  if (!productId || !firstName || !lastName || !phone || !state || !selectedSize || !selectedColor) {
+    return res.status(400).json({ message: 'يرجى ملء كل الحقول المطلوبة' });
+  }
+
+  const phoneRegex = /^[0-9+\-\s]{8,20}$/;
+  if (!phoneRegex.test(phone)) {
+    return res.status(400).json({ message: 'رقم الهاتف غير صالح' });
+  }
+
   const product = await Product.findById(productId);
   if (!product || !product.isActive) return res.status(404).json({ message: 'المنتج غير متاح' });
 

@@ -1,0 +1,59 @@
+const express = require('express');
+const Product = require('../models/Product');
+const Order = require('../models/Order');
+const auth = require('../middleware/auth');
+
+const router = express.Router();
+
+router.post('/', async (req, res) => {
+  const { productId, firstName, lastName, phone, state, notes = '', selectedSize, selectedColor } = req.body;
+  const product = await Product.findById(productId);
+  if (!product || !product.isActive) return res.status(404).json({ message: 'المنتج غير متاح' });
+
+  const order = await Order.create({
+    product: product._id,
+    productSnapshot: {
+      name: product.name,
+      price: product.offerPrice || product.price,
+      image: product.images?.[0]
+    },
+    firstName,
+    lastName,
+    phone,
+    state,
+    notes,
+    selectedSize,
+    selectedColor
+  });
+
+  res.status(201).json({ message: 'تم إرسال طلبك بنجاح', orderId: order._id });
+});
+
+router.get('/', auth, async (req, res) => {
+  const { phone, status } = req.query;
+  const query = {};
+  if (phone) query.phone = { $regex: phone, $options: 'i' };
+  if (status) query.status = status;
+
+  const orders = await Order.find(query).sort({ createdAt: -1 });
+  res.json(orders);
+});
+
+router.patch('/:id/status', auth, async (req, res) => {
+  const { status } = req.body;
+  const order = await Order.findByIdAndUpdate(req.params.id, { status }, { new: true });
+  if (!order) return res.status(404).json({ message: 'الطلب غير موجود' });
+  res.json(order);
+});
+
+router.get('/stats/summary', auth, async (_req, res) => {
+  const [total, confirmed, cancelled] = await Promise.all([
+    Order.countDocuments(),
+    Order.countDocuments({ status: 'confirmed' }),
+    Order.countDocuments({ status: 'cancelled' })
+  ]);
+
+  res.json({ total, confirmed, cancelled });
+});
+
+module.exports = router;
